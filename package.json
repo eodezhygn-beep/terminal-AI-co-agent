@@ -1,0 +1,26 @@
+{
+  "name": "terminal-ai-co-agent",
+  "version": "0.1.0",
+  "description": "Minimal terminal-native AI coding agent for cloud/SSH environments.",
+  "type": "module",
+  "main": "src/agent.js",
+  "bin": {
+    "ai": "src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node tests/run.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "terminal",
+    "AI",
+    "agent",
+    "cli",
+    "ssh",
+    "cloud"
+  ],
+  "license": "MIT"
+}
