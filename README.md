@@ -44,6 +44,12 @@ node src/cli.js retry "echo hello"
 node src/cli.js debug "false"
 node src/cli.js select "README architecture"
 node src/cli.js context README.md
+node src/cli.js plan "Build a repository scaffold and add Phase 3 planning support"
+node src/cli.js embed "terminal ai agent"
+node src/cli.js agent-list
+node src/cli.js agent-run local "write README.md with new CLI examples"
+node src/cli.js longrun example "sleep 1 && echo done"
+node src/cli.js longrun-status <taskId>
 node src/cli.js ai "Summarize the repository in one sentence"
 ```
 

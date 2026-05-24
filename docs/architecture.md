@@ -33,6 +33,18 @@ The Phase 2 implementation adds:
 - prioritized file selection based on query keywords
 - smarter CLI operations for debugging and context-aware workflows
 
+## Phase 3 Preview
+
+The Phase 3 skeleton includes:
+
+- `src/planner.js` for task decomposition and plan creation
+- `src/agent-manager.js` for multi-agent registration and orchestration
+- `src/longRunning.js` for async task tracking
+- `src/embeddings.js` for provider-agnostic semantic embedding support
+- `src/agents/` with base and simple agent abstractions
+
+Phase 3 is designed to enable autonomous planning and multi-agent workflows while keeping the system modular and extensible.
+
 ## Design Principles
 
 - deterministic: no autonomous loops in Phase 1

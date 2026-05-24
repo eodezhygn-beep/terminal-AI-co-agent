@@ -5,6 +5,10 @@ import { execShell } from '../src/terminal.js';
 import { retryOperation } from '../src/retry.js';
 import { compressText, findRelevantFiles } from '../src/context.js';
 import { debugShell, analyzeShellFailure } from '../src/debug.js';
+import { Planner } from '../src/planner.js';
+import { AgentManager } from '../src/agent-manager.js';
+import { LongRunningTaskManager } from '../src/longRunning.js';
+import { embedText } from '../src/embeddings.js';
 
 async function runTests() {
   const tempDir = './tests/.tmp';
@@ -31,6 +35,19 @@ async function runTests() {
   assert.strictEqual(debugResult.success, true);
   assert.strictEqual(debugResult.result.stdout.trim(), 'debug-test');
   assert.strictEqual(analyzeShellFailure('false', { code: 1, stdout: '', stderr: 'command failed' }).includes('exited with code'), true);
+
+  const planner = new Planner({ agents: [] });
+  const plan = planner.createPlan('Write README and add CLI commands');
+  assert.ok(plan.steps.length >= 1);
+
+  const manager = new AgentManager();
+  const longRunning = new LongRunningTaskManager();
+  const outputId = longRunning.createTask('noop', async () => 'ok');
+  const task = longRunning.getTask(outputId);
+  assert.strictEqual(task.name, 'noop');
+
+  const embedding = await embedText('test');
+  assert.ok(Array.isArray(embedding));
 
   await fs.rm(tempDir, { recursive: true, force: true });
   console.log('All tests passed.');

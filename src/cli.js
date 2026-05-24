@@ -4,6 +4,11 @@ import { execShell } from './terminal.js';
 import { callAI, getProvider } from './ai.js';
 import { findRelevantFiles, compressFileForContext } from './context.js';
 import { debugShell } from './debug.js';
+import { Planner } from './planner.js';
+import { AgentManager } from './agent-manager.js';
+import { LongRunningTaskManager } from './longRunning.js';
+import { SimpleAgent } from './agents/simpleAgent.js';
+import { embedText, getEmbeddingProvider } from './embeddings.js';
 
 function usage() {
   console.log(`
@@ -18,6 +23,12 @@ Usage:
   ai debug <command>
   ai select <query>
   ai context <path>
+  ai plan <task description>
+  ai embed "<text>"
+  ai agent-list
+  ai agent-run <agent> <task>
+  ai longrun <name> <command>
+  ai longrun-status <taskId>
   ai ai "<prompt>"
 
 Environment:
@@ -26,6 +37,14 @@ Environment:
   AI_MODEL optionally chooses the model
 `);
 }
+
+const manager = new AgentManager();
+const longRunning = new LongRunningTaskManager();
+const defaultAgent = new SimpleAgent('local', async (task) => {
+  return `local agent executed task: ${task}`;
+});
+manager.registerAgent(defaultAgent);
+const planner = new Planner({ agents: [defaultAgent] });
 
 async function main() {
   const [, , command, ...rest] = process.argv;
@@ -110,6 +129,59 @@ async function main() {
         if (!filePath) throw new Error('Missing file path.');
         const content = await compressFileForContext(filePath);
         process.stdout.write(content);
+        break;
+      }
+      case 'plan': {
+        const description = rest.join(' ').trim();
+        if (!description) throw new Error('Missing task description.');
+        const plan = planner.createPlan(description);
+        console.log(JSON.stringify(plan, null, 2));
+        break;
+      }
+      case 'embed': {
+        const text = rest.join(' ').trim();
+        if (!text) throw new Error('Missing text to embed.');
+        const vector = await embedText(text);
+        console.log(JSON.stringify({ provider: getEmbeddingProvider() || 'stub', length: vector.length }));
+        break;
+      }
+      case 'agent-list': {
+        const agents = manager.listAgents();
+        console.log(agents.map((agent) => agent.name).join('\n'));
+        break;
+      }
+      case 'agent-run': {
+        const [agentName, ...taskParts] = rest;
+        if (!agentName) throw new Error('Missing agent name.');
+        const task = taskParts.join(' ').trim();
+        if (!task) throw new Error('Missing task description.');
+        const result = await manager.runTask(agentName, task);
+        console.log(result);
+        break;
+      }
+      case 'longrun': {
+        const [name, ...commandParts] = rest;
+        if (!name) throw new Error('Missing task name.');
+        const commandString = commandParts.join(' ').trim();
+        if (!commandString) throw new Error('Missing command.');
+        const taskId = longRunning.createTask(name, async () => {
+          const result = await execShell(commandString);
+          if (result.code !== 0) {
+            throw new Error(result.stderr || `Command failed with code ${result.code}`);
+          }
+          return result.stdout.trim();
+        });
+        console.log(taskId);
+        break;
+      }
+      case 'longrun-status': {
+        const [taskId] = rest;
+        if (!taskId) throw new Error('Missing task ID.');
+        const task = longRunning.getTask(taskId);
+        if (!task) {
+          throw new Error(`Task not found: ${taskId}`);
+        }
+        console.log(JSON.stringify(task, null, 2));
         break;
       }
       case 'ai': {
