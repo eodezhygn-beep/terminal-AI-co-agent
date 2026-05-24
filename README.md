@@ -23,6 +23,7 @@ A minimal terminal-native AI coding system scaffold designed for cloud/SSH-based
 ## Current Status
 
 Phase 1 core implementation is added with file operations, folder creation, shell execution, safety validation, and a simple AI provider abstraction.
+Phase 2 features are also included for retry logic, debugging support, context compression, and smarter file selection.
 
 ## CLI Usage
 
@@ -39,6 +40,10 @@ node src/cli.js read README.md
 node src/cli.js write ./tmp/note.txt "hello from CLI"
 node src/cli.js mkdir ./tmp/sub
 node src/cli.js exec "echo hello"
+node src/cli.js retry "echo hello"
+node src/cli.js debug "false"
+node src/cli.js select "README architecture"
+node src/cli.js context README.md
 node src/cli.js ai "Summarize the repository in one sentence"
 ```
 

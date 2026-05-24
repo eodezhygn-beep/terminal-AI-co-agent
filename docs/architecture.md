@@ -16,9 +16,22 @@ The initial system is intentionally minimal and deterministic, with a clear exec
 ## Components
 
 - `src/agent` - entrypoint for command/request execution
-- `src/io` - file and folder operations
+- `src/fs` - file and folder operations
 - `src/terminal` - shell command execution and output capture
 - `src/safety` - validation of commands to avoid destructive operations
+- `src/retry` - retry wrapper for resilient operations
+- `src/context` - compressed context extraction and smart file selection
+- `src/debug` - debugging analysis and AI-assisted failure diagnostics
+
+## Phase 2 Enhancements
+
+The Phase 2 implementation adds:
+
+- automatic retry support for transient shell failures
+- error analysis for failed commands
+- compressed file context generation
+- prioritized file selection based on query keywords
+- smarter CLI operations for debugging and context-aware workflows
 
 ## Design Principles
 
