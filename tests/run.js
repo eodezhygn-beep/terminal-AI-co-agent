@@ -9,6 +9,20 @@ import { Planner } from '../src/planner.js';
 import { AgentManager } from '../src/agent-manager.js';
 import { LongRunningTaskManager } from '../src/longRunning.js';
 import { embedText } from '../src/embeddings.js';
+import geminiProvider from '../src/providers/gemini.js';
+import openrouterProvider from '../src/providers/openrouter.js';
+import { chooseProviderAndModel, selectTaskModel } from '../src/providers/index.js';
+
+function restoreEnv(snapshot) {
+  for (const key of Object.keys(process.env)) {
+    if (!(key in snapshot)) {
+      delete process.env[key];
+    }
+  }
+  for (const [key, value] of Object.entries(snapshot)) {
+    process.env[key] = value;
+  }
+}
 
 async function runTests() {
   const tempDir = './tests/.tmp';
@@ -45,6 +59,86 @@ async function runTests() {
   const outputId = longRunning.createTask('noop', async () => 'ok');
   const task = longRunning.getTask(outputId);
   assert.strictEqual(task.name, 'noop');
+
+  const originalEnv = { ...process.env };
+  try {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.DEFAULT_PROVIDER;
+    delete process.env.AI_MODEL;
+    delete process.env.DEFAULT_MODEL;
+    delete process.env.FALLBACK_MODEL;
+    delete process.env.PLANNING_MODEL;
+    delete process.env.CODING_MODEL;
+    delete process.env.DEBUG_MODEL;
+
+    process.env.OPENROUTER_API_KEY = 'openrouter-test';
+    process.env.GEMINI_API_KEY = 'gemini-test';
+
+    const debugSelection = chooseProviderAndModel({ prompt: 'debug this error' });
+    assert.strictEqual(debugSelection.model, 'deepseek/deepseek-v4-fast');
+    assert.strictEqual(debugSelection.provider.name, 'openrouter');
+
+    const summarySelection = chooseProviderAndModel({ prompt: 'summarize repo' });
+    assert.strictEqual(summarySelection.provider.name, 'gemini');
+    assert.strictEqual(summarySelection.model, 'gemini-2.5-flash');
+
+    const routeModel = selectTaskModel('build api endpoint');
+    assert.strictEqual(routeModel, 'qwen/qwen3-coder-480b-a35b-instruct');
+
+    const originalFetch = globalThis.fetch;
+    try {
+      let geminiRequest;
+      globalThis.fetch = async (url, options) => {
+        geminiRequest = { url, options };
+        return {
+          ok: true,
+          json: async () => ({ candidates: [{ content: 'Gemini reply' }] })
+        };
+      };
+
+      const geminiText = await geminiProvider.createCompletion({ prompt: 'test gemini', model: 'gemini-2.5-flash', maxTokens: 10 });
+      assert.strictEqual(geminiText, 'Gemini reply');
+      assert.ok(geminiRequest.url.includes('generateMessage?key='));
+
+      let openrouterRequest;
+      globalThis.fetch = async (url, options) => {
+        openrouterRequest = { url, options };
+        return {
+          ok: true,
+          json: async () => ({ choices: [{ message: { content: 'OpenRouter reply' } }] })
+        };
+      };
+
+      process.env.OPENROUTER_API_KEY = 'openrouter-test';
+      const openrouterText = await openrouterProvider.createCompletion({ prompt: 'test openrouter', model: 'qwen/qwen3-next-80b-a3b-instruct', maxTokens: 10 });
+      assert.strictEqual(openrouterText, 'OpenRouter reply');
+      assert.ok(openrouterRequest.url.includes('/chat/completions'));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      chooseProviderAndModel({ prompt: 'hello' });
+      assert.fail('Expected missing provider error');
+    } catch (error) {
+      assert.ok(error.message.includes('No AI provider configured'));
+    }
+  } finally {
+    restoreEnv(originalEnv);
+  }
+
+  // Dotenv integration test
+  await fs.mkdir(`${tempDir}/dotenv-test`, { recursive: true });
+  await fs.writeFile(`${tempDir}/dotenv-test/.env`, 'DOTENV_TEST=loaded');
+  const dotenvResult = await execShell('node -e "import \'dotenv/config\'; console.log(process.env.DOTENV_TEST)"', {
+    cwd: `${tempDir}/dotenv-test`
+  });
+  assert.strictEqual(dotenvResult.stdout.trim(), 'loaded');
 
   const embedding = await embedText('test');
   assert.ok(Array.isArray(embedding));

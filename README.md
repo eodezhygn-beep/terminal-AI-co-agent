@@ -2,65 +2,131 @@
 
 A minimal terminal-native AI coding system scaffold designed for cloud/SSH-based environments.
 
-## Goals
-
-- Phase 1: implement deterministic core features
-  - read file contents
-  - write files
-  - create folders
-  - execute shell commands
-  - capture command output and errors
-- Phase 2: add debugging, retry, and context intelligence
-- Phase 3: add autonomous planning and provider-agnostic AI integration
-
-## Repository Structure
-
-- `src/` - primary implementation code
-- `docs/` - architecture, setup, and design docs
-- `scripts/` - utility scripts and helpers
-- `tests/` - unit/integration tests
-
-## Current Status
-
-Phase 1 core implementation is added with file operations, folder creation, shell execution, safety validation, and a simple AI provider abstraction.
-Phase 2 features are also included for retry logic, debugging support, context compression, and smarter file selection.
-
-## CLI Usage
-
-Install dependencies (optional, no external deps currently):
+## Installation
 
 ```bash
 npm install
 ```
 
-Run the CLI directly:
+You can run the CLI directly or install it globally:
 
 ```bash
-node src/cli.js read README.md
-node src/cli.js write ./tmp/note.txt "hello from CLI"
-node src/cli.js mkdir ./tmp/sub
-node src/cli.js exec "echo hello"
-node src/cli.js retry "echo hello"
-node src/cli.js debug "false"
-node src/cli.js select "README architecture"
-node src/cli.js context README.md
-node src/cli.js plan "Build a repository scaffold and add Phase 3 planning support"
-node src/cli.js embed "terminal ai agent"
-node src/cli.js agent-list
-node src/cli.js agent-run local "write README.md with new CLI examples"
-node src/cli.js longrun example "sleep 1 && echo done"
-node src/cli.js longrun-status <taskId>
-node src/cli.js ai "Summarize the repository in one sentence"
-```
-
-Or install the package globally for the `ai` command:
-
-```bash
+node src/cli.js <command>
 npm install -g .
+ai <command>
 ```
 
-## Next Steps
+## Environment Setup
 
-1. Add CLI argument parsing and command validation
-2. Expand AI provider support and error handling
-3. Add functional tests for the CLI and AI integration
+Create a `.env` file in the repository root or copy the example:
+
+```bash
+cp .env.example .env
+```
+
+Add your provider keys:
+
+```dotenv
+OPENROUTER_API_KEY=your-openrouter-key
+GEMINI_API_KEY=your-gemini-key
+```
+
+Supported environment variables:
+
+- `OPENROUTER_API_KEY`
+- `GEMINI_API_KEY`
+- `OPENAI_API_KEY` (supported for backward compatibility)
+- `DEFAULT_PROVIDER` (e.g. `openrouter`, `gemini`, `openai`)
+- `DEFAULT_MODEL`
+- `AI_BASE_URL`
+- task routing models: `PLANNING_MODEL`, `CODING_MODEL`, `DEBUG_MODEL`, `FALLBACK_MODEL`
+
+## Provider Support
+
+### OpenRouter
+
+The default provider is `openrouter` when `OPENROUTER_API_KEY` is present. It supports chat completions and OpenAI-compatible embeddings.
+
+Default model:
+
+```dotenv
+DEFAULT_MODEL=qwen/qwen3-next-80b-a3b-instruct
+```
+
+### Gemini
+
+Gemini support is implemented using the Google AI Studio / Generative Language API format.
+
+Default model:
+
+```dotenv
+FALLBACK_MODEL=gemini-2.5-flash
+```
+
+### OpenAI
+
+OpenAI remains supported through `OPENAI_API_KEY` for backward compatibility.
+
+## Task-based Model Routing
+
+The CLI automatically selects a model based on prompt intent:
+
+- architecture / planning / UX / frontend UI → `qwen/qwen3-next-80b-a3b-instruct`
+- backend / APIs / AI orchestration → `qwen/qwen3-coder-480b-a35b-instruct`
+- debugging / fixing bugs / frontend design → `deepseek/deepseek-v4-fast`
+- summaries / fallback → `gemini-2.5-flash`
+
+### Manual override
+
+You can override the model explicitly:
+
+```bash
+node src/cli.js ai --model deepseek/deepseek-v4-fast "fix this bug"
+```
+
+## CLI Commands
+
+```bash
+node src/cli.js read <path>
+node src/cli.js write <path> <content>
+node src/cli.js mkdir <path>
+node src/cli.js exec <command>
+node src/cli.js retry <command>
+node src/cli.js debug <command>
+node src/cli.js select <query>
+node src/cli.js context <path>
+node src/cli.js plan "<task description>"
+node src/cli.js embed "<text>"
+node src/cli.js agent-list
+node src/cli.js agent-run <agent> <task>
+node src/cli.js longrun <name> <command>
+node src/cli.js longrun-status <taskId>
+node src/cli.js ai "<prompt>"
+```
+
+## Examples
+
+```bash
+node src/cli.js ai "build api"
+node src/cli.js ai --model deepseek/deepseek-v4-fast "fix this bug"
+node src/cli.js plan "Create an architecture plan for a terminal AI agent"
+node src/cli.js embed "terminal ai assistant"
+```
+
+## Testing
+
+Run the test harness:
+
+```bash
+npm test
+```
+
+## Notes
+
+- `.env` is loaded automatically at startup via `dotenv`.
+- Provider selection prioritizes:
+  1. explicit CLI model flag
+  2. task router
+  3. configured default provider
+  4. fallback provider
+- If no provider key is configured, the CLI prints a clear error message explaining the required `.env` variables.

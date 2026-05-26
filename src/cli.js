@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+import 'dotenv/config';
 import { readFile, writeFile, createFolder } from './fs.js';
 import { execShell } from './terminal.js';
-import { callAI, getProvider } from './ai.js';
+import { callAI, getProvider, resolveAIProviderName } from './ai.js';
 import { findRelevantFiles, compressFileForContext } from './context.js';
 import { debugShell } from './debug.js';
 import { Planner } from './planner.js';
@@ -29,12 +30,13 @@ Usage:
   ai agent-run <agent> <task>
   ai longrun <name> <command>
   ai longrun-status <taskId>
-  ai ai "<prompt>"
+  ai ai [--model <model>] "<prompt>"
 
 Environment:
-  OPENAI_API_KEY or OPENROUTER_API_KEY
+  OPENAI_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY
+  DEFAULT_PROVIDER optionally chooses the default provider
+  DEFAULT_MODEL optionally chooses the default model
   AI_BASE_URL optionally overrides the provider endpoint
-  AI_MODEL optionally chooses the model
 `);
 }
 
@@ -185,10 +187,26 @@ async function main() {
         break;
       }
       case 'ai': {
-        const prompt = rest.join(' ').trim();
+        const args = [...rest];
+        let explicitModel = null;
+
+        const modelFlagIndex = args.findIndex((arg) => arg === '--model' || arg.startsWith('--model='));
+        if (modelFlagIndex !== -1) {
+          const flag = args[modelFlagIndex];
+          if (flag === '--model') {
+            explicitModel = args[modelFlagIndex + 1];
+            args.splice(modelFlagIndex, 2);
+          } else {
+            explicitModel = flag.split('=')[1];
+            args.splice(modelFlagIndex, 1);
+          }
+        }
+
+        const prompt = args.join(' ').trim();
         if (!prompt) throw new Error('Missing prompt text.');
-        console.log(`Provider: ${getProvider() || 'none'}`);
-        const output = await callAI(prompt);
+        const providerName = resolveAIProviderName(prompt, explicitModel);
+        console.log(`Provider: ${providerName}`);
+        const output = await callAI(prompt, { model: explicitModel });
         process.stdout.write(output + '\n');
         break;
       }
