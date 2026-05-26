@@ -1,45 +1,138 @@
 import { postJson } from './utils.js';
 
 const DEFAULT_BASE_URL = 'https://api.openrouter.ai/v1';
-const DEFAULT_CHAT_MODEL = 'qwen/qwen3-next-80b-a3b-instruct';
-const DEFAULT_EMBED_MODEL = 'text-embedding-3-small';
 
-export default {
-  name: 'openrouter',
-  isAvailable() {
-    return Boolean(process.env.OPENROUTER_API_KEY);
-  },
-  getDefaultModel() {
-    return process.env.AI_MODEL || process.env.DEFAULT_MODEL || process.env.OPENROUTER_MODEL || DEFAULT_CHAT_MODEL;
-  },
-  getDefaultEmbedModel() {
-    return process.env.AI_MODEL || process.env.DEFAULT_MODEL || process.env.OPENROUTER_EMBED_MODEL || DEFAULT_EMBED_MODEL;
-  },
-  async createCompletion({ prompt, model, maxTokens = 500 }) {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    const url = process.env.AI_BASE_URL || `${DEFAULT_BASE_URL}/chat/completions`;
-    const selectedModel = model || this.getDefaultModel();
+const DEFAULT_CHAT_MODEL =
+  'qwen/qwen3-next-80b-a3b-instruct';
 
-    const body = {
-      model: selectedModel,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: maxTokens
-    };
+  const DEFAULT_EMBED_MODEL =
+    'text-embedding-3-small';
 
-    const json = await postJson(url, body, apiKey, 'OpenRouter');
-    return json.choices?.[0]?.message?.content?.trim() ?? '';
-  },
-  async createEmbedding({ text, model }) {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    const url = process.env.AI_BASE_URL || `${DEFAULT_BASE_URL}/embeddings`;
-    const selectedModel = model || this.getDefaultEmbedModel();
+    export default {
+      name: 'openrouter',
 
-    const body = {
-      model: selectedModel,
-      input: text
-    };
+        isAvailable() {
+            return Boolean(process.env.OPENROUTER_API_KEY);
+              },
 
-    const json = await postJson(url, body, apiKey, 'OpenRouter');
-    return json.data?.[0]?.embedding ?? [];
-  }
-};
+                getDefaultModel() {
+                    return (
+                          process.env.AI_MODEL ||
+                                process.env.DEFAULT_MODEL ||
+                                      process.env.OPENROUTER_MODEL ||
+                                            DEFAULT_CHAT_MODEL
+                                                );
+                                                  },
+
+                                                    getDefaultEmbedModel() {
+                                                        return (
+                                                              process.env.OPENROUTER_EMBED_MODEL ||
+                                                                    DEFAULT_EMBED_MODEL
+                                                                        );
+                                                                          },
+
+                                                                            async createCompletion({
+                                                                                prompt,
+                                                                                    model,
+                                                                                        maxTokens = 500
+                                                                                          }) {
+                                                                                              const apiKey =
+                                                                                                    process.env.OPENROUTER_API_KEY;
+
+                                                                                                        if (!apiKey) {
+                                                                                                              throw new Error(
+                                                                                                                      'Missing OPENROUTER_API_KEY in .env'
+                                                                                                                            );
+                                                                                                                                }
+
+                                                                                                                                    const selectedModel =
+                                                                                                                                          model || this.getDefaultModel();
+
+                                                                                                                                              const baseUrl =
+                                                                                                                                                    process.env.OPENROUTER_BASE_URL ||
+                                                                                                                                                          DEFAULT_BASE_URL;
+
+                                                                                                                                                              const url =
+                                                                                                                                                                    `${baseUrl}/chat/completions`;
+
+                                                                                                                                                                        const body = {
+                                                                                                                                                                              model: selectedModel,
+                                                                                                                                                                                    messages: [
+                                                                                                                                                                                            {
+                                                                                                                                                                                                      role: 'user',
+                                                                                                                                                                                                                content: prompt
+                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                              ],
+                                                                                                                                                                                                                                    max_tokens: maxTokens
+                                                                                                                                                                                                                                        };
+
+                                                                                                                                                                                                                                            const headers = {
+                                                                                                                                                                                                                                                  Authorization: `Bearer ${apiKey}`,
+                                                                                                                                                                                                                                                        'HTTP-Referer':
+                                                                                                                                                                                                                                                                'https://github.com/eodezhygn-beep/terminal-AI-co-agent',
+                                                                                                                                                                                                                                                                      'X-Title': 'terminal-ai-co-agent',
+                                                                                                                                                                                                                                                                            'Content-Type': 'application/json'
+                                                                                                                                                                                                                                                                                };
+
+                                                                                                                                                                                                                                                                                    const json = await postJson(
+                                                                                                                                                                                                                                                                                          url,
+                                                                                                                                                                                                                                                                                                body,
+                                                                                                                                                                                                                                                                                                      headers,
+                                                                                                                                                                                                                                                                                                            'OpenRouter'
+                                                                                                                                                                                                                                                                                                                );
+
+                                                                                                                                                                                                                                                                                                                    return (
+                                                                                                                                                                                                                                                                                                                          json?.choices?.[0]?.message?.content?.trim() ||
+                                                                                                                                                                                                                                                                                                                                'No response from OpenRouter.'
+                                                                                                                                                                                                                                                                                                                                    );
+                                                                                                                                                                                                                                                                                                                                      },
+
+                                                                                                                                                                                                                                                                                                                                        async createEmbedding({
+                                                                                                                                                                                                                                                                                                                                            text,
+                                                                                                                                                                                                                                                                                                                                                model
+                                                                                                                                                                                                                                                                                                                                                  }) {
+                                                                                                                                                                                                                                                                                                                                                      const apiKey =
+                                                                                                                                                                                                                                                                                                                                                            process.env.OPENROUTER_API_KEY;
+
+                                                                                                                                                                                                                                                                                                                                                                if (!apiKey) {
+                                                                                                                                                                                                                                                                                                                                                                      throw new Error(
+                                                                                                                                                                                                                                                                                                                                                                              'Missing OPENROUTER_API_KEY in .env'
+                                                                                                                                                                                                                                                                                                                                                                                    );
+                                                                                                                                                                                                                                                                                                                                                                                        }
+
+                                                                                                                                                                                                                                                                                                                                                                                            const selectedModel =
+                                                                                                                                                                                                                                                                                                                                                                                                  model || this.getDefaultEmbedModel();
+
+                                                                                                                                                                                                                                                                                                                                                                                                      const baseUrl =
+                                                                                                                                                                                                                                                                                                                                                                                                            process.env.OPENROUTER_BASE_URL ||
+                                                                                                                                                                                                                                                                                                                                                                                                                  DEFAULT_BASE_URL;
+
+                                                                                                                                                                                                                                                                                                                                                                                                                      const url =
+                                                                                                                                                                                                                                                                                                                                                                                                                            `${baseUrl}/embeddings`;
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                const body = {
+                                                                                                                                                                                                                                                                                                                                                                                                                                      model: selectedModel,
+                                                                                                                                                                                                                                                                                                                                                                                                                                            input: text
+                                                                                                                                                                                                                                                                                                                                                                                                                                                };
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                    const headers = {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          Authorization: `Bearer ${apiKey}`,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                'HTTP-Referer':
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        'https://github.com/eodezhygn-beep/terminal-AI-co-agent',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                              'X-Title': 'terminal-ai-co-agent',
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'Content-Type': 'application/json'
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        };
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            const json = await postJson(
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  url,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        body,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              headers,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    'OpenRouter'
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        );
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            return (
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  json?.data?.[0]?.embedding || []
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      );
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
