@@ -1,6 +1,6 @@
 import { postJson } from './utils.js';
 
-const DEFAULT_BASE_URL = 'https://api.openrouter.ai/v1';
+const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 
 const DEFAULT_CHAT_MODEL =
   'qwen/qwen3-next-80b-a3b-instruct';
