@@ -115,6 +115,32 @@ async function runTests() {
       const openrouterText = await openrouterProvider.createCompletion({ prompt: 'test openrouter', model: 'qwen/qwen3-next-80b-a3b-instruct', maxTokens: 10 });
       assert.strictEqual(openrouterText, 'OpenRouter reply');
       assert.ok(openrouterRequest.url.includes('/chat/completions'));
+
+      globalThis.fetch = async () => ({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        text: async () => JSON.stringify({
+          error: {
+            message: 'Provider returned error',
+            code: 429,
+            metadata: {
+              raw: 'model is temporarily rate-limited upstream',
+              retry_after_seconds: 30
+            }
+          }
+        }),
+        json: async () => ({})
+      });
+
+      try {
+        await openrouterProvider.createCompletion({ prompt: 'test openrouter', model: 'qwen/qwen3-next-80b-a3b-instruct:free', maxTokens: 10 });
+        assert.fail('Expected OpenRouter rate limit error');
+      } catch (error) {
+        assert.ok(error.message.includes('OpenRouter rate limit reached for qwen/qwen3-next-80b-a3b-instruct:free'));
+        assert.ok(error.message.includes('Retry after 30 seconds'));
+        assert.ok(error.message.includes('Try another model or retry shortly'));
+      }
     } finally {
       globalThis.fetch = originalFetch;
     }
