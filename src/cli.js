@@ -30,7 +30,12 @@ Usage:
   ai agent-run <agent> <task>
   ai longrun <name> <command>
   ai longrun-status <taskId>
-  ai ai [--model <model>] "<prompt>"
+  ai ai [--model <model>] <prompt>
+
+Examples:
+  ai ai Design architecture for app
+  ai ai "\nBuild architecture\nRequirements:\n- offline first\n- GPS\n"
+  cat prompt.txt | ai ai
 
 Environment:
   OPENAI_API_KEY, OPENROUTER_API_KEY, or GEMINI_API_KEY
@@ -38,6 +43,49 @@ Environment:
   DEFAULT_MODEL optionally chooses the default model
   AI_BASE_URL optionally overrides the provider endpoint
 `);
+}
+
+async function readStdin() {
+  return new Promise((resolve, reject) => {
+    let input = '';
+    process.stdin.setEncoding('utf8');
+
+    process.stdin.on('data', (chunk) => {
+      input += chunk;
+    });
+
+    process.stdin.on('end', () => {
+      resolve(input);
+    });
+
+    process.stdin.on('error', reject);
+  });
+}
+
+function parseAIArguments(args) {
+  const parts = [...args];
+  const separatorIndex = parts.indexOf('--');
+  const candidateParts = separatorIndex !== -1 ? parts.slice(0, separatorIndex) : parts;
+  const promptParts = separatorIndex !== -1 ? parts.slice(separatorIndex + 1) : [...parts];
+  const parsed = { explicitModel: null, promptParts };
+
+  const modelFlagIndex = candidateParts.findIndex((arg) => arg === '--model' || arg.startsWith('--model='));
+  if (modelFlagIndex !== -1) {
+    const flag = candidateParts[modelFlagIndex];
+    if (flag === '--model') {
+      parsed.explicitModel = candidateParts[modelFlagIndex + 1];
+      candidateParts.splice(modelFlagIndex, 2);
+    } else {
+      parsed.explicitModel = flag.split('=')[1];
+      candidateParts.splice(modelFlagIndex, 1);
+    }
+
+    if (separatorIndex === -1) {
+      parsed.promptParts = candidateParts;
+    }
+  }
+
+  return parsed;
 }
 
 const manager = new AgentManager();
@@ -187,22 +235,13 @@ async function main() {
         break;
       }
       case 'ai': {
-        const args = [...rest];
-        let explicitModel = null;
+        const { explicitModel, promptParts } = parseAIArguments(rest);
+        let prompt = promptParts.join(' ').trim();
 
-        const modelFlagIndex = args.findIndex((arg) => arg === '--model' || arg.startsWith('--model='));
-        if (modelFlagIndex !== -1) {
-          const flag = args[modelFlagIndex];
-          if (flag === '--model') {
-            explicitModel = args[modelFlagIndex + 1];
-            args.splice(modelFlagIndex, 2);
-          } else {
-            explicitModel = flag.split('=')[1];
-            args.splice(modelFlagIndex, 1);
-          }
+        if (!prompt && !process.stdin.isTTY) {
+          prompt = (await readStdin()).trim();
         }
 
-        const prompt = args.join(' ').trim();
         if (!prompt) throw new Error('Missing prompt text.');
         const providerName = resolveAIProviderName(prompt, explicitModel);
         console.log(`Provider: ${providerName}`);

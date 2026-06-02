@@ -1,0 +1,15 @@
+Design architecture for a field operations mobile app.
+
+Requirements:
+- offline first
+- technicians can view tasks
+- task status tracking
+- notes
+- GPS support
+- scalable architecture
+
+Recommend:
+- frontend structure
+- backend architecture
+- database schema
+- folder structure
