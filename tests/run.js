@@ -117,6 +117,33 @@ async function runTests() {
       assert.ok(openrouterRequest.url.includes('/chat/completions'));
 
       globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: [{ type: 'text', text: 'OpenRouter reply from array' }]
+            }
+          }]
+        })
+      });
+      const openrouterArrayText = await openrouterProvider.createCompletion({ prompt: 'test openrouter array', model: 'qwen/qwen3-next-80b-a3b-instruct', maxTokens: 10 });
+      assert.strictEqual(openrouterArrayText, 'OpenRouter reply from array');
+
+      globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({ choices: [{ text: 'OpenRouter reply fallback text' }] })
+      });
+      const openrouterTextFallback = await openrouterProvider.createCompletion({ prompt: 'test openrouter text fallback', model: 'qwen/qwen3-next-80b-a3b-instruct', maxTokens: 10 });
+      assert.strictEqual(openrouterTextFallback, 'OpenRouter reply fallback text');
+
+      globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({ choices: [{ message: { text: 'OpenRouter reply assistant field' } }] })
+      });
+      const openrouterAssistantFieldText = await openrouterProvider.createCompletion({ prompt: 'test openrouter assistant field', model: 'qwen/qwen3-next-80b-a3b-instruct', maxTokens: 10 });
+      assert.strictEqual(openrouterAssistantFieldText, 'OpenRouter reply assistant field');
+
+      globalThis.fetch = async () => ({
         ok: false,
         status: 429,
         statusText: 'Too Many Requests',
