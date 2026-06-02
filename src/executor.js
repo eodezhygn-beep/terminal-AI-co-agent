@@ -1,5 +1,7 @@
 import readline from 'readline';
 import { createFolder, readFile, writeFile, appendFile, fileExists } from './fs.js';
+import { execShell } from './terminal.js';
+import { analyzeShellCommand } from './safety.js';
 
 function describeAction(action) {
   switch (action.type) {
@@ -168,5 +170,134 @@ export async function executePlan(actions) {
   summary.changedFiles = Array.from(
     new Set([...summary.createdFiles, ...summary.editedFiles])
   );
+  return summary;
+}
+
+// Phase 3: Terminal command execution
+
+function promptContinueOnFailure(command) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    console.log('Continue? (y/n)');
+    rl.question('> ', (answer) => {
+      rl.close();
+      const normalized = (answer || '').trim().toLowerCase();
+      resolve(normalized === 'y' || normalized === 'yes');
+    });
+  });
+}
+
+export async function executeTerminalActions(actions) {
+  const summary = {
+    executed: [],
+    skipped: [],
+    failed: [],
+    total: actions.length
+  };
+
+  if (actions.length === 0) {
+    return summary;
+  }
+
+  for (let index = 0; index < actions.length; index += 1) {
+    const action = actions[index];
+    const step = index + 1;
+
+    console.log(`\n[${step}/${actions.length}] Running:`);
+    console.log(action.command);
+    console.log('');
+    console.log('⟳ executing...');
+
+    try {
+      // Safety check before execution
+      const safety = analyzeShellCommand(action.command);
+      if (!safety.safe) {
+        console.log(`✗ BLOCKED`);
+        console.log(`  Reason: ${safety.reason}`);
+        console.log('');
+        summary.failed.push({
+          command: action.command,
+          error: safety.reason,
+          blocked: true
+        });
+        continue;
+      }
+
+      // Execute command
+      const result = await execShell(action.command);
+
+      if (result.code === 0) {
+        console.log('✓ success');
+        if (result.stdout) {
+          console.log('\nstdout:');
+          const truncated = result.stdout.length > 500 ? result.stdout.substring(0, 500) + '\n...' : result.stdout;
+          console.log(truncated.trim());
+        }
+        if (!result.stdout && !result.stderr) {
+          console.log('(no output)');
+        }
+        if (result.stderr) {
+          console.log('\nstderr:');
+          console.log(result.stderr.trim());
+        }
+        console.log('');
+        summary.executed.push({
+          command: action.command,
+          result
+        });
+      } else {
+        console.log('✗ failed');
+        console.log(`  Exit code: ${result.code}`);
+        if (result.stderr) {
+          console.log('\nstderr:');
+          const truncated = result.stderr.length > 500 ? result.stderr.substring(0, 500) + '\n...' : result.stderr;
+          console.log(truncated.trim());
+        }
+        console.log('');
+
+        // Ask to continue on failure
+        const shouldContinue = await promptContinueOnFailure(action.command);
+        if (!shouldContinue) {
+          console.log('\nExecution cancelled by user.');
+          summary.failed.push({
+            command: action.command,
+            error: `Failed with exit code ${result.code}`,
+            result
+          });
+          return summary;
+        }
+
+        summary.failed.push({
+          command: action.command,
+          error: `Failed with exit code ${result.code}`,
+          result
+        });
+      }
+    } catch (error) {
+      console.log('✗ error');
+      console.log(`  ${error.message}`);
+      console.log('');
+
+      const shouldContinue = await promptContinueOnFailure(action.command);
+      if (!shouldContinue) {
+        console.log('\nExecution cancelled by user.');
+        summary.failed.push({
+          command: action.command,
+          error: error.message
+        });
+        return summary;
+      }
+
+      summary.failed.push({
+        command: action.command,
+        error: error.message
+      });
+    }
+  }
+
   return summary;
 }

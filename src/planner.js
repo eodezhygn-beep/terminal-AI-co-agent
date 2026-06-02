@@ -22,6 +22,7 @@ export class Planner {
   createApprovalPlan(taskDescription) {
     const basePlan = this.createPlan(taskDescription);
     const actions = this.createExecutionPlan(taskDescription);
+    const terminalActions = this.extractTerminalActions(taskDescription);
     const changedFiles = [...new Set(actions.filter((action) => action.path && action.type !== 'create_folder').map((action) => action.path))];
 
     return {
@@ -33,12 +34,13 @@ export class Planner {
       proposedActions: {
         create: actions.filter((action) => action.type === 'create_file').map((action) => action.path),
         edit: actions.filter((action) => action.type === 'edit_file').map((action) => action.path),
-        install: [],
-        commands: []
+        install: terminalActions.filter(t => t.category === 'install').map(t => t.command),
+        commands: terminalActions.filter(t => t.category !== 'install').map(t => t.command)
       },
       changedFiles,
       reasoning: this._defaultReasoning(taskDescription),
-      actions
+      actions,
+      terminalActions  // Phase 3: Include terminal actions
     };
   }
 
@@ -132,6 +134,51 @@ Update this implementation with secure password storage, session management, and
     }
 
     return actions;
+  }
+
+  // Phase 3: Extract terminal commands from task description
+  extractTerminalActions(taskDescription) {
+    const normalized = (taskDescription || '').toLowerCase();
+    const commands = [];
+
+    // Detect common terminal operations that need approval
+    if (/\bnpm\s+install\b/.test(normalized)) {
+      commands.push({
+        type: 'terminal',
+        category: 'install',
+        command: 'npm install',
+        safe: true
+      });
+    }
+
+    if (/\bnpm\s+test\b/.test(normalized)) {
+      commands.push({
+        type: 'terminal',
+        category: 'test',
+        command: 'npm test',
+        safe: true
+      });
+    }
+
+    if (/\bnpx\s+prisma\s+migrate/.test(normalized)) {
+      commands.push({
+        type: 'terminal',
+        category: 'database',
+        command: 'npx prisma migrate dev',
+        safe: true
+      });
+    }
+
+    if (/\bgit\s+(add|commit|push)/.test(normalized)) {
+      commands.push({
+        type: 'terminal',
+        category: 'git',
+        command: 'git status',
+        safe: true
+      });
+    }
+
+    return commands;
   }
 
   _defaultReasoning(taskDescription) {

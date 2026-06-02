@@ -77,3 +77,42 @@ export async function promptApproval() {
 
   return response.approved;
 }
+
+// Phase 3: Terminal command approval helpers
+
+export function formatTerminalApprovalPlan(commands) {
+  const lines = [];
+  
+  if (commands.length === 0) {
+    return '';
+  }
+
+  lines.push('');
+  lines.push('TERMINAL ACTIONS REQUIRED');
+  lines.push('');
+  lines.push('Commands proposed:');
+  lines.push('');
+
+  commands.forEach((cmd, index) => {
+    lines.push(`[${index + 1}]`);
+    lines.push(cmd.command);
+    if (cmd.category) {
+      lines.push(`Category: ${cmd.category}`);
+    }
+    lines.push('');
+  });
+
+  lines.push('Proceed with terminal commands? (y/n)');
+  return lines.join('\n');
+}
+
+export async function promptTerminalApproval() {
+  let response = await requestApproval();
+
+  while (!response.valid) {
+    console.log('Please answer with y / yes or n / no.');
+    response = await requestApproval();
+  }
+
+  return response.approved;
+}

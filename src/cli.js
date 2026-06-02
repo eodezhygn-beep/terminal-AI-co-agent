@@ -10,8 +10,8 @@ import { AgentManager } from './agent-manager.js';
 import { LongRunningTaskManager } from './longRunning.js';
 import { SimpleAgent } from './agents/simpleAgent.js';
 import { embedText, getEmbeddingProvider } from './embeddings.js';
-import { formatApprovalPlan, promptApproval } from './approval.js';
-import { executePlan } from './executor.js';
+import { formatApprovalPlan, promptApproval, formatTerminalApprovalPlan, promptTerminalApproval } from './approval.js';
+import { executePlan, executeTerminalActions } from './executor.js';
 
 function usage() {
   console.log(`
@@ -208,55 +208,94 @@ async function main() {
         const task = taskParts.join(' ').trim();
         if (!task) throw new Error('Missing task description.');
 
+        // Phase 1: Generate approval plan
         const approvalPlan = planner.createApprovalPlan(task);
         console.log(formatApprovalPlan(approvalPlan));
 
-        const approved = await promptApproval();
-        if (!approved) {
+        // Phase 1: Get filesystem approval
+        const filesystemApproved = await promptApproval();
+        if (!filesystemApproved) {
           console.log('\nCANCELLED: No changes were made.');
           break;
         }
 
-        console.log('\nExecution approved.');
+        console.log('\nFilesystem execution approved.');
+        
+        // Phase 2: Execute filesystem actions
         const executionPlan = planner.createExecutionPlan(task);
-        const result = await executePlan(executionPlan);
+        const filesystemResult = await executePlan(executionPlan);
 
-        console.log('\nExecution completed');
-        console.log('\nCreated:');
-        console.log(`- ${result.createdFiles.length} file(s)`);
-        console.log('\nEdited:');
-        console.log(`- ${result.editedFiles.length} file(s)`);
-        console.log('\nSkipped:');
-        console.log(`- ${result.skipped.length} file(s)`);
-        console.log('\nFailed:');
-        console.log(`- ${result.failed.length} file(s)`);
+        // Phase 3: Check for terminal actions
+        const terminalActions = approvalPlan.terminalActions || [];
+        let terminalResult = { executed: [], failed: [], skipped: [], total: 0 };
 
-        if (result.createdFiles.length > 0) {
+        if (terminalActions.length > 0) {
+          console.log(formatTerminalApprovalPlan(terminalActions));
+          
+          const terminalApproved = await promptTerminalApproval();
+          if (!terminalApproved) {
+            console.log('\nSkipped terminal execution.');
+          } else {
+            console.log('\nTerminal execution approved.');
+            terminalResult = await executeTerminalActions(terminalActions);
+          }
+        }
+
+        // Final summary
+        console.log('\n═══════════════════════════════');
+        console.log('EXECUTION SUMMARY');
+        console.log('═══════════════════════════════\n');
+
+        console.log('Filesystem operations:');
+        console.log(`  Created: ${filesystemResult.createdFiles.length}`);
+        console.log(`  Edited: ${filesystemResult.editedFiles.length}`);
+        console.log(`  Skipped: ${filesystemResult.skipped.length}`);
+        console.log(`  Failed: ${filesystemResult.failed.length}`);
+
+        console.log('\nTerminal commands:');
+        console.log(`  Executed: ${terminalResult.executed.length}`);
+        console.log(`  Failed: ${terminalResult.failed.length}`);
+        console.log(`  Skipped: ${terminalResult.skipped.length}`);
+
+        if (filesystemResult.createdFiles.length > 0) {
           console.log('\nCreated files:');
-          result.createdFiles.forEach((file) => console.log(`- ${file}`));
+          filesystemResult.createdFiles.forEach((file) => console.log(`  - ${file}`));
         }
 
-        if (result.editedFiles.length > 0) {
+        if (filesystemResult.editedFiles.length > 0) {
           console.log('\nEdited files:');
-          result.editedFiles.forEach((file) => console.log(`- ${file}`));
+          filesystemResult.editedFiles.forEach((file) => console.log(`  - ${file}`));
         }
 
-        if (result.skipped.length > 0) {
+        if (filesystemResult.skipped.length > 0) {
           console.log('\nSkipped files:');
-          result.skipped.forEach((file) => console.log(`- ${file}`));
+          filesystemResult.skipped.forEach((file) => console.log(`  - ${file}`));
         }
 
-        if (result.failed.length > 0) {
-          console.log('\nFailed actions:');
-          result.failed.forEach(({ action, error }) => {
-            console.log(`- ${action.path || action.type}: ${error}`);
+        if (filesystemResult.failed.length > 0) {
+          console.log('\nFailed file actions:');
+          filesystemResult.failed.forEach(({ action, error }) => {
+            console.log(`  - ${action.path || action.type}: ${error}`);
           });
         }
 
-        if (result.changedFiles.length > 0) {
-          console.log('\nChanged files:');
-          result.changedFiles.forEach((file) => console.log(`- ${file}`));
+        if (terminalResult.executed.length > 0) {
+          console.log('\nExecuted commands:');
+          terminalResult.executed.forEach(({ command }) => console.log(`  - ${command}`));
         }
+
+        if (terminalResult.failed.length > 0) {
+          console.log('\nFailed commands:');
+          terminalResult.failed.forEach(({ command, error, blocked }) => {
+            if (blocked) {
+              console.log(`  - ${command} (BLOCKED: ${error})`);
+            } else {
+              console.log(`  - ${command}: ${error}`);
+            }
+          });
+        }
+
+        console.log('\n═══════════════════════════════\n');
 
         break;
       }
