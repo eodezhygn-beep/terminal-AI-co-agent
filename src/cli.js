@@ -10,6 +10,7 @@ import { AgentManager } from './agent-manager.js';
 import { LongRunningTaskManager } from './longRunning.js';
 import { SimpleAgent } from './agents/simpleAgent.js';
 import { embedText, getEmbeddingProvider } from './embeddings.js';
+import { formatApprovalPlan, promptApproval } from './approval.js';
 
 function usage() {
   console.log(`
@@ -205,8 +206,18 @@ async function main() {
         if (!agentName) throw new Error('Missing agent name.');
         const task = taskParts.join(' ').trim();
         if (!task) throw new Error('Missing task description.');
-        const result = await manager.runTask(agentName, task);
-        console.log(result);
+
+        const approvalPlan = planner.createApprovalPlan(task);
+        console.log(formatApprovalPlan(approvalPlan));
+
+        const approved = await promptApproval();
+        if (!approved) {
+          console.log('\nCANCELLED: No changes were made.');
+          break;
+        }
+
+        console.log('\nExecution approved.');
+        console.log('Phase 1 stub: no files or commands are being executed yet.');
         break;
       }
       case 'longrun': {
