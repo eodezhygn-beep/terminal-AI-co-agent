@@ -21,8 +21,8 @@ export class Planner {
 
   createApprovalPlan(taskDescription) {
     const basePlan = this.createPlan(taskDescription);
-    const actions = this._categorizeTask(taskDescription);
-    const changedFiles = [...new Set([...(actions.create || []), ...(actions.edit || [])])];
+    const actions = this.createExecutionPlan(taskDescription);
+    const changedFiles = [...new Set(actions.filter((action) => action.path && action.type !== 'create_folder').map((action) => action.path))];
 
     return {
       goal: basePlan.task,
@@ -31,64 +31,107 @@ export class Planner {
       agentCount: basePlan.agentCount,
       createdAt: basePlan.createdAt,
       proposedActions: {
-        create: actions.create,
-        edit: actions.edit,
-        install: actions.install,
-        commands: actions.commands
+        create: actions.filter((action) => action.type === 'create_file').map((action) => action.path),
+        edit: actions.filter((action) => action.type === 'edit_file').map((action) => action.path),
+        install: [],
+        commands: []
       },
       changedFiles,
-      reasoning: actions.reasoning || this._defaultReasoning(taskDescription)
+      reasoning: this._defaultReasoning(taskDescription),
+      actions
     };
   }
 
-  _categorizeTask(taskDescription) {
+  createExecutionPlan(taskDescription) {
     const normalized = (taskDescription || '').toLowerCase();
-    const create = [];
-    const edit = [];
-    const install = [];
-    const commands = [];
-    let reasoning = '';
+    const actions = [];
 
     if (!normalized.trim()) {
-      reasoning = 'Task description was empty; no actions were proposed.';
-      return { create, edit, install, commands, reasoning };
+      return actions;
     }
 
     if (/\bauth(entication)?\b/.test(normalized) || /\blogin\b/.test(normalized)) {
-      create.push('backend/src/routes/auth.ts', 'backend/src/middleware/auth.ts');
-      edit.push('backend/src/server.ts', 'prisma/schema.prisma');
-      install.push('jsonwebtoken', 'bcrypt');
-      commands.push('npm install', 'npx prisma migrate dev');
-      reasoning = 'JWT auth for mobile-first app.';
+      actions.push({ type: 'create_folder', path: 'backend/src/auth' });
+      actions.push({
+        type: 'create_file',
+        path: 'backend/src/auth/auth.ts',
+        content: `export function authenticateUser(email: string, password: string) {
+  return {
+    success: false,
+    message: 'Auth stub: implement login logic here.'
+  };
+}
+`
+      });
+      actions.push({
+        type: 'create_file',
+        path: 'backend/src/auth/README.md',
+        content: `# Auth scaffold
+
+This folder contains starter code for authentication and login handling.
+Update this implementation with secure password storage, session management, and identity validation.
+`
+      });
+      actions.push({
+        type: 'append_file',
+        path: 'README.md',
+        content: `\n## Auth scaffold\nCreated backend/src/auth with starter login system files.\n`
+      });
     } else if (/\bprisma\b|\bdatabase\b|\bdb\b/.test(normalized)) {
-      create.push('prisma/schema.prisma');
-      edit.push('src/database.js', 'src/server.js');
-      install.push('@prisma/client', 'prisma');
-      commands.push('npx prisma migrate dev');
-      reasoning = 'Database schema and migration changes for the requested data layer.';
+      actions.push({ type: 'create_folder', path: 'prisma' });
+      actions.push({
+        type: 'create_file',
+        path: 'prisma/schema.prisma',
+        content: `// Prisma schema scaffold\n// Add your datasource, generator, and models here.\n`
+      });
+      actions.push({
+        type: 'append_file',
+        path: 'README.md',
+        content: `\n## Database scaffold\nCreated prisma/schema.prisma with starter schema notes.\n`
+      });
     } else if (/\bdeploy\b|\bproduction\b|\bhost\b|\bserver\b/.test(normalized)) {
-      create.push('Dockerfile', 'deploy/scripts/deploy.sh');
-      edit.push('README.md');
-      install.push('docker', 'node');
-      commands.push('docker build .', 'docker push <registry>');
-      reasoning = 'Prepare deployment artifacts and environment for production delivery.';
+      actions.push({ type: 'create_folder', path: 'deploy' });
+      actions.push({
+        type: 'create_file',
+        path: 'deploy/README.md',
+        content: `# Deployment scaffold\n\nThis directory contains deployment notes and helper scripts for production delivery.\n`
+      });
+      actions.push({
+        type: 'append_file',
+        path: 'README.md',
+        content: `\n## Deployment scaffold\nCreated deploy/README.md with starter deployment guidance.\n`
+      });
     } else if (/\btest(s)?\b|\bcoverage\b|\bunit\b|\bintegration\b/.test(normalized)) {
-      create.push('tests/feature.test.js');
-      edit.push('package.json');
-      install.push('jest');
-      commands.push('npm test');
-      reasoning = 'Add test scaffolding and ensure the project can validate behavior.';
+      actions.push({
+        type: 'create_file',
+        path: 'tests/feature.test.js',
+        content: `// Starter test scaffold\nimport assert from 'assert';\n\ndescribe('feature scaffold', () => {\n  it('should run a placeholder test', () => {\n    assert.strictEqual(1 + 1, 2);\n  });\n});\n`
+      });
+      actions.push({
+        type: 'append_file',
+        path: 'README.md',
+        content: `\n## Testing scaffold\nCreated tests/feature.test.js with a placeholder test.\n`
+      });
     } else {
       const slug = normalized
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '')
         .slice(0, 30) || 'task';
-      create.push(`src/${slug}.ts`);
-      edit.push('README.md');
-      reasoning = `High-level plan for "${taskDescription}".`;
+      const folder = `src/${slug}`;
+      actions.push({ type: 'create_folder', path: folder });
+      actions.push({
+        type: 'create_file',
+        path: `${folder}/index.ts`,
+        content: `export function start() {\n  return { message: "Stub implementation for ${taskDescription.replace(/"/g, '\\"')}" };\n}\n`
+      });
+      actions.push({
+        type: 'append_file',
+        path: 'README.md',
+        content: `\n## Task scaffold\nCreated ${folder}/index.ts for ${taskDescription}.\n`
+      });
     }
 
-    return { create, edit, install, commands, reasoning };
+    return actions;
   }
 
   _defaultReasoning(taskDescription) {

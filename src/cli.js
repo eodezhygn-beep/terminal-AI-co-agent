@@ -11,6 +11,7 @@ import { LongRunningTaskManager } from './longRunning.js';
 import { SimpleAgent } from './agents/simpleAgent.js';
 import { embedText, getEmbeddingProvider } from './embeddings.js';
 import { formatApprovalPlan, promptApproval } from './approval.js';
+import { executePlan } from './executor.js';
 
 function usage() {
   console.log(`
@@ -217,7 +218,46 @@ async function main() {
         }
 
         console.log('\nExecution approved.');
-        console.log('Phase 1 stub: no files or commands are being executed yet.');
+        const executionPlan = planner.createExecutionPlan(task);
+        const result = await executePlan(executionPlan);
+
+        console.log('\nExecution completed');
+        console.log('\nCreated:');
+        console.log(`- ${result.createdFiles.length} file(s)`);
+        console.log('\nEdited:');
+        console.log(`- ${result.editedFiles.length} file(s)`);
+        console.log('\nSkipped:');
+        console.log(`- ${result.skipped.length} file(s)`);
+        console.log('\nFailed:');
+        console.log(`- ${result.failed.length} file(s)`);
+
+        if (result.createdFiles.length > 0) {
+          console.log('\nCreated files:');
+          result.createdFiles.forEach((file) => console.log(`- ${file}`));
+        }
+
+        if (result.editedFiles.length > 0) {
+          console.log('\nEdited files:');
+          result.editedFiles.forEach((file) => console.log(`- ${file}`));
+        }
+
+        if (result.skipped.length > 0) {
+          console.log('\nSkipped files:');
+          result.skipped.forEach((file) => console.log(`- ${file}`));
+        }
+
+        if (result.failed.length > 0) {
+          console.log('\nFailed actions:');
+          result.failed.forEach(({ action, error }) => {
+            console.log(`- ${action.path || action.type}: ${error}`);
+          });
+        }
+
+        if (result.changedFiles.length > 0) {
+          console.log('\nChanged files:');
+          result.changedFiles.forEach((file) => console.log(`- ${file}`));
+        }
+
         break;
       }
       case 'longrun': {
