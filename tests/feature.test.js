@@ -142,8 +142,27 @@ describe('Planner Intent Classification & Filesystem Handling', () => {
 
     assert(folderActions.length > 0, 'Should create folder');
     assert.strictEqual(folderActions[0].path, 'frontend', 'Folder should be named "frontend"');
+    assert.strictEqual(fileActions.length, 1, 'Should create a file inside the folder');
+    assert.strictEqual(fileActions[0].path, 'frontend/hello.txt', 'File should be created inside frontend');
     assert(!actions.some(a => a.type === 'append_file'), 'Should NOT append to README');
     assert(!actions.some(a => a.path && a.path.includes('index.ts')), 'Should NOT create TypeScript files');
+  });
+
+  it('should parse file creation inside a previously created folder', () => {
+    const task = 'Create a folder named frontend.\nCreate hello.txt inside frontend.\nNo TypeScript.\nNo README edits.';
+    const actions = planner.createExecutionPlan(task);
+
+    assert(actions.some(a => a.type === 'create_folder' && a.path === 'frontend'), 'Should create frontend folder');
+    assert(actions.some(a => a.type === 'create_file' && a.path === 'frontend/hello.txt'), 'Should place hello.txt inside frontend');
+  });
+
+  it('should parse nested folder creation and repo-root placement', () => {
+    const task = 'Create folder named frontend in repo root.\nCreate folder named frontend/components under frontend.\nCreate file index.md inside frontend/components.\nNo TypeScript.\nNo README edits.';
+    const actions = planner.createExecutionPlan(task);
+
+    assert(actions.some(a => a.type === 'create_folder' && a.path === 'frontend'), 'Should create frontend at repo root');
+    assert(actions.some(a => a.type === 'create_folder' && a.path === 'frontend/components'), 'Should create nested frontend/components folder');
+    assert(actions.some(a => a.type === 'create_file' && a.path === 'frontend/components/index.md'), 'Should place index.md inside frontend/components');
   });
 
   it('should return empty actions for implementation intent (no auto scaffolding)', () => {

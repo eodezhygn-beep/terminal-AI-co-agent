@@ -243,6 +243,14 @@ Update this implementation with secure password storage, session management, and
     // Parse lines for filesystem operations
     let currentFolder = null;
     const createdPaths = new Set();
+    const createdFolders = new Set();
+
+    const normalizePath = (path) => {
+      return path
+        .trim()
+        .replace(/^\/+|\/+$/g, '')
+        .replace(/[.,;:!?]+$/g, '');
+    };
 
     for (const line of lines) {
       // Skip exclusion directives (No TypeScript, No README edits)
@@ -250,24 +258,33 @@ Update this implementation with secure password storage, session management, and
         continue;
       }
 
-      // Match folder creation patterns
-      const folderMatch = line.match(/create\s+(?:folder|directory|dir)\s+named\s+([\w\-./]+)/i) ||
-                         line.match(/^([\w\-./]+)\s*\/\s*$/i);
+      const folderMatch = line.match(/create\s+(?:folder|directory|dir)\s+(?:named\s+)?([\w\-.\/]+)(?:\s+(?:in|at)\s+repo\s+root)?/i)
+        || line.match(/^([\w\-.\/]+)\s*\/\s*$/i);
       if (folderMatch) {
-        const folderPath = folderMatch[1];
-        if (!createdPaths.has(folderPath)) {
+        const folderPath = normalizePath(folderMatch[1]);
+        if (!createdFolders.has(folderPath)) {
           actions.push({ type: 'create_folder', path: folderPath });
+          createdFolders.add(folderPath);
           createdPaths.add(folderPath);
-          currentFolder = folderPath;
         }
+        currentFolder = folderPath;
         continue;
       }
 
-      // Match file creation patterns
-      const fileMatch = line.match(/(?:create|inside\s+create)\s+([\w\-./]+\.\w+)/i);
+      const fileMatch = line.match(/create\s+(?:file\s+)?([\w\-.\/]+\.\w+)(?:\s+(?:inside|in|under)\s+([\w\-.\/]+))?/i)
+        || line.match(/^(?:inside|in|under)\s+create\s+(?:file\s+)?([\w\-.\/]+\.\w+)/i);
       if (fileMatch) {
-        const filePath = fileMatch[1];
-        // If no folder specified yet, use relative path as-is
+        const fileName = fileMatch[1];
+        const parentFolder = fileMatch[2];
+        let filePath = fileName;
+
+        if (parentFolder) {
+          filePath = `${normalizePath(parentFolder)}/${fileName}`;
+        } else if (/^(?:inside|in|under)\b/i.test(line) && currentFolder) {
+          filePath = `${normalizePath(currentFolder)}/${fileName}`;
+        }
+
+        filePath = normalizePath(filePath);
         if (!createdPaths.has(filePath)) {
           actions.push({
             type: 'create_file',
@@ -282,9 +299,9 @@ Update this implementation with secure password storage, session management, and
 
     // If no explicit actions were parsed, try to extract folder from first mention
     if (actions.length === 0) {
-      const folderMatch = taskDescription.match(/create\s+(?:folder|directory)\s+named\s+([\w\-]+)/i);
+      const folderMatch = taskDescription.match(/create\s+(?:folder|directory|dir)\s+(?:named\s+)?([\w\-.\/]+)(?:\s+(?:in|at)\s+repo\s+root)?/i);
       if (folderMatch) {
-        const folder = folderMatch[1];
+        const folder = normalizePath(folderMatch[1]);
         actions.push({ type: 'create_folder', path: folder });
       }
     }
