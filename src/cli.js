@@ -205,7 +205,10 @@ async function main() {
       case 'agent-run': {
         const [agentName, ...taskParts] = rest;
         if (!agentName) throw new Error('Missing agent name.');
-        const task = taskParts.join(' ').trim();
+        
+        // Parse --model flag from task arguments
+        const { explicitModel, promptParts } = parseAIArguments(taskParts);
+        const task = promptParts.join(' ').trim();
         if (!task) throw new Error('Missing task description.');
 
         // Phase 1: Generate approval plan

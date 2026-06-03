@@ -129,5 +129,4 @@ npm test
   2. task router
   3. configured default provider
   4. fallback provider
-- If no provider key is configured, the CLI prints a clear error message explaining the required `.env` variables.
-
+- If no provider key is configured, the CLI prints a clear error message explaining the required `.env` 

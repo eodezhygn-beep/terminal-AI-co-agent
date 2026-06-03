@@ -9,6 +9,64 @@ export class Planner {
     }
   }
 
+  /**
+   * Classify task intent into filesystem, implementation, or planning
+   * Returns: { intent: 'filesystem'|'implementation'|'planning', confidence: 0-1 }
+   */
+  classifyIntent(taskDescription) {
+    const normalized = (taskDescription || '').toLowerCase();
+    
+    // Filesystem intent patterns
+    const filesystemPatterns = [
+      /\bcreate\s+(?:folder|directory|dir|file)\b/,
+      /\bfolder\s+named\b/,
+      /\bcreate\s+a\s+file\b/,
+      /\binside\s+create\b/,
+      /\bmkdir\b/,
+      /\bwrite\s+to\b/,
+      /\brename\b/,
+      /\bmove\b/,
+      /\bdelete\b/,
+      /\bremove\s+(?:folder|directory|file)\b/
+    ];
+
+    // Implementation intent patterns
+    const implementationPatterns = [
+      /\bbuild\s+(?:feature|component|api|logic)\b/,
+      /\bcreate\s+(?:react|component|api|endpoint|service)\b/,
+      /\bimplement\b/,
+      /\badd\s+(?:function|method|class)\b/,
+      /\bwrite\s+(?:code|logic|handler)\b/,
+      /\bauth(?:entication|enticate)?\b/,
+      /\bapi\b/,
+      /\bdatabase\b/,
+      /\bprisma\b/
+    ];
+
+    // Planning intent patterns
+    const planningPatterns = [
+      /\barchitecture\b/,
+      /\bdesign\s+(?:system|pattern|proposal)\b/,
+      /\brepo\s+structure\b/,
+      /\bpropose\b/,
+      /\bplan\b/
+    ];
+
+    const filesystemMatch = filesystemPatterns.some(p => p.test(normalized));
+    const implementationMatch = implementationPatterns.some(p => p.test(normalized));
+    const planningMatch = planningPatterns.some(p => p.test(normalized));
+
+    if (filesystemMatch && !implementationMatch) {
+      return { intent: 'filesystem', confidence: 0.95 };
+    } else if (planningMatch && !implementationMatch) {
+      return { intent: 'planning', confidence: 0.9 };
+    } else if (implementationMatch) {
+      return { intent: 'implementation', confidence: 0.85 };
+    }
+
+    return { intent: 'implementation', confidence: 0.5 };
+  }
+
   createPlan(taskDescription) {
     const steps = this.decomposeTask(taskDescription);
     return {
@@ -50,6 +108,14 @@ export class Planner {
 
     if (!normalized.trim()) {
       return actions;
+    }
+
+    // Classify intent
+    const { intent } = this.classifyIntent(taskDescription);
+
+    // For filesystem intent, parse literal instructions
+    if (intent === 'filesystem') {
+      return this._parseFilesystemInstructions(taskDescription);
     }
 
     if (/\bauth(entication)?\b/.test(normalized) || /\blogin\b/.test(normalized)) {
@@ -114,25 +180,10 @@ Update this implementation with secure password storage, session management, and
         path: 'README.md',
         content: `\n## Testing scaffold\nCreated tests/feature.test.js with a placeholder test.\n`
       });
-    } else {
-      const slug = normalized
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '')
-        .slice(0, 30) || 'task';
-      const folder = `src/${slug}`;
-      actions.push({ type: 'create_folder', path: folder });
-      actions.push({
-        type: 'create_file',
-        path: `${folder}/index.ts`,
-        content: `export function start() {\n  return { message: "Stub implementation for ${taskDescription.replace(/"/g, '\\"')}" };\n}\n`
-      });
-      actions.push({
-        type: 'append_file',
-        path: 'README.md',
-        content: `\n## Task scaffold\nCreated ${folder}/index.ts for ${taskDescription}.\n`
-      });
     }
 
+    // For implementation and planning intents, return empty to avoid automatic scaffolding
+    // The approval plan will still show reasoning, but no files will be auto-created
     return actions;
   }
 
@@ -181,8 +232,69 @@ Update this implementation with secure password storage, session management, and
     return commands;
   }
 
+  /**
+   * Parse literal filesystem instructions from task description
+   * Extracts folder/file creation patterns and respects literal paths
+   */
+  _parseFilesystemInstructions(taskDescription) {
+    const actions = [];
+    const lines = taskDescription.split('\n').map(l => l.trim()).filter(Boolean);
+
+    // Parse lines for filesystem operations
+    let currentFolder = null;
+    const createdPaths = new Set();
+
+    for (const line of lines) {
+      // Skip exclusion directives (No TypeScript, No README edits)
+      if (/^no\s+/i.test(line)) {
+        continue;
+      }
+
+      // Match folder creation patterns
+      const folderMatch = line.match(/create\s+(?:folder|directory|dir)\s+named\s+([\w\-./]+)/i) ||
+                         line.match(/^([\w\-./]+)\s*\/\s*$/i);
+      if (folderMatch) {
+        const folderPath = folderMatch[1];
+        if (!createdPaths.has(folderPath)) {
+          actions.push({ type: 'create_folder', path: folderPath });
+          createdPaths.add(folderPath);
+          currentFolder = folderPath;
+        }
+        continue;
+      }
+
+      // Match file creation patterns
+      const fileMatch = line.match(/(?:create|inside\s+create)\s+([\w\-./]+\.\w+)/i);
+      if (fileMatch) {
+        const filePath = fileMatch[1];
+        // If no folder specified yet, use relative path as-is
+        if (!createdPaths.has(filePath)) {
+          actions.push({
+            type: 'create_file',
+            path: filePath,
+            content: ''
+          });
+          createdPaths.add(filePath);
+        }
+        continue;
+      }
+    }
+
+    // If no explicit actions were parsed, try to extract folder from first mention
+    if (actions.length === 0) {
+      const folderMatch = taskDescription.match(/create\s+(?:folder|directory)\s+named\s+([\w\-]+)/i);
+      if (folderMatch) {
+        const folder = folderMatch[1];
+        actions.push({ type: 'create_folder', path: folder });
+      }
+    }
+
+    return actions;
+  }
+
   _defaultReasoning(taskDescription) {
-    return `Plan generated from task description: "${taskDescription}".`;
+    const { intent } = this.classifyIntent(taskDescription);
+    return `Plan generated from task description: "${taskDescription}". Intent: ${intent}.`;
   }
 
   decomposeTask(taskDescription) {
