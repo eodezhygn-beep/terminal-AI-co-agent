@@ -18,14 +18,16 @@ export class Planner {
     
     // Filesystem intent patterns
     const filesystemPatterns = [
-      /\bcreate\s+(?:folder|directory|dir|file)\b/,
-      /\bfolder\s+named\b/,
-      /\bcreate\s+a\s+file\b/,
-      /\binside\s+create\b/,
+      /\bcreate\s+(?:a\s+)?(?:folder|directory|dir)\b/,
+      /\bcreate\s+(?:a\s+)?(?:file)\b/,
+      /\bcreate\s+(?:folder|directory)\s+named\b/,
       /\bmkdir\b/,
-      /\bwrite\s+to\b/,
-      /\brename\b/,
-      /\bmove\b/,
+      /\bcreate\s+file\b/,
+      /\binside\b/,
+      /\bthe\s+file\s+content\b/,
+      /\btext:\b/,
+      /\bput\s+this\s+text\b/,
+      /\bwrite\s+.+\s+inside\b/,
       /\bdelete\b/,
       /\bremove\s+(?:folder|directory|file)\b/
     ];
@@ -64,7 +66,8 @@ export class Planner {
       return { intent: 'implementation', confidence: 0.85 };
     }
 
-    return { intent: 'implementation', confidence: 0.5 };
+    // Unknown / no specific intent detected
+    return { intent: 'unknown', confidence: 0.5 };
   }
 
   createPlan(taskDescription) {
@@ -112,78 +115,18 @@ export class Planner {
 
     // Classify intent
     const { intent } = this.classifyIntent(taskDescription);
+    // If the user explicitly included filesystem instructions anywhere in the
+    // text, prefer literal parsing. This avoids accidental scaffolding for
+    // implementation/planning prompts like "Design architecture...".
+    const hasFilesystemKeywords = /create\s+(?:a\s+)?(?:folder|directory|dir|file)|mkdir\b|inside\s+[\w\-\.\/]+|the\s+file\s+content\b|text:\b|put\s+this\s+text\b|write\s+.+\s+inside\b/i.test(normalized);
 
-    // For filesystem intent, parse literal instructions
-    if (intent === 'filesystem') {
+    if (intent === 'filesystem' || hasFilesystemKeywords) {
       return this._parseFilesystemInstructions(taskDescription);
     }
 
-    if (/\bauth(entication)?\b/.test(normalized) || /\blogin\b/.test(normalized)) {
-      actions.push({ type: 'create_folder', path: 'backend/src/auth' });
-      actions.push({
-        type: 'create_file',
-        path: 'backend/src/auth/auth.ts',
-        content: `export function authenticateUser(email: string, password: string) {
-  return {
-    success: false,
-    message: 'Auth stub: implement login logic here.'
-  };
-}
-`
-      });
-      actions.push({
-        type: 'create_file',
-        path: 'backend/src/auth/README.md',
-        content: `# Auth scaffold
-
-This folder contains starter code for authentication and login handling.
-Update this implementation with secure password storage, session management, and identity validation.
-`
-      });
-      actions.push({
-        type: 'append_file',
-        path: 'README.md',
-        content: `\n## Auth scaffold\nCreated backend/src/auth with starter login system files.\n`
-      });
-    } else if (/\bprisma\b|\bdatabase\b|\bdb\b/.test(normalized)) {
-      actions.push({ type: 'create_folder', path: 'prisma' });
-      actions.push({
-        type: 'create_file',
-        path: 'prisma/schema.prisma',
-        content: `// Prisma schema scaffold\n// Add your datasource, generator, and models here.\n`
-      });
-      actions.push({
-        type: 'append_file',
-        path: 'README.md',
-        content: `\n## Database scaffold\nCreated prisma/schema.prisma with starter schema notes.\n`
-      });
-    } else if (/\bdeploy\b|\bproduction\b|\bhost\b|\bserver\b/.test(normalized)) {
-      actions.push({ type: 'create_folder', path: 'deploy' });
-      actions.push({
-        type: 'create_file',
-        path: 'deploy/README.md',
-        content: `# Deployment scaffold\n\nThis directory contains deployment notes and helper scripts for production delivery.\n`
-      });
-      actions.push({
-        type: 'append_file',
-        path: 'README.md',
-        content: `\n## Deployment scaffold\nCreated deploy/README.md with starter deployment guidance.\n`
-      });
-    } else if (/\btest(s)?\b|\bcoverage\b|\bunit\b|\bintegration\b/.test(normalized)) {
-      actions.push({
-        type: 'create_file',
-        path: 'tests/feature.test.js',
-        content: `// Starter test scaffold\nimport assert from 'assert';\n\ndescribe('feature scaffold', () => {\n  it('should run a placeholder test', () => {\n    assert.strictEqual(1 + 1, 2);\n  });\n});\n`
-      });
-      actions.push({
-        type: 'append_file',
-        path: 'README.md',
-        content: `\n## Testing scaffold\nCreated tests/feature.test.js with a placeholder test.\n`
-      });
-    }
-
-    // For implementation and planning intents, return empty to avoid automatic scaffolding
-    // The approval plan will still show reasoning, but no files will be auto-created
+    // For implementation/planning/unknown intents without explicit filesystem
+    // instructions, do not create files, edit READMEs, or scaffold. Return
+    // an empty execution plan to avoid legacy fallthrough behavior.
     return actions;
   }
 
@@ -252,13 +195,16 @@ Update this implementation with secure password storage, session management, and
         .replace(/[.,;:!?]+$/g, '');
     };
 
-    for (const line of lines) {
+    let lastFileAction = null;
+    for (let idx = 0; idx < lines.length; idx++) {
+      const line = lines[idx];
       // Skip exclusion directives (No TypeScript, No README edits)
       if (/^no\s+/i.test(line)) {
         continue;
       }
 
-      const folderMatch = line.match(/create\s+(?:folder|directory|dir)\s+(?:named\s+)?([\w\-.\/]+)(?:\s+(?:in|at)\s+repo\s+root)?/i)
+      const folderMatch = line.match(/create\s+(?:a\s+)?(?:folder|directory|dir)\s+(?:named\s+)?["']?([\w\-.\/]+)["']?(?:\s+(?:in|at)\s+repo\s+root)?/i)
+        || line.match(/(?:^|\s)mkdir\s+-p?\s+["']?([\w\-.\/]+)["']?/i)
         || line.match(/^([\w\-.\/]+)\s*\/\s*$/i);
       if (folderMatch) {
         const folderPath = normalizePath(folderMatch[1]);
@@ -268,16 +214,22 @@ Update this implementation with secure password storage, session management, and
           createdPaths.add(folderPath);
         }
         currentFolder = folderPath;
+        lastFileAction = null;
         continue;
       }
 
-      const fileMatch = line.match(/create\s+(?:file\s+)?([\w\-.\/]+\.\w+)(?:\s+(?:inside|in|under)\s+([\w\-.\/]+))?/i)
-        || line.match(/^(?:inside|in|under)\s+create\s+(?:file\s+)?([\w\-.\/]+\.\w+)/i);
+      const fileMatch = line.match(/create\s+(?:a\s+)?(?:file\s+(?:named\s+)?)?["']?([\w\-.]+\.[\w]+)["']?(?:\s+(?:inside|in|under|at)\s+["']?([\w\-.\/]+)["']?)?/i)
+        || line.match(/(?:inside|in|under)\s+["']?([\w\-.\/]+)["']?\s*,?\s*(?:create|create\s+a)?\s*["']?([\w\-.]+\.[\w]+)["']?/i)
+        || line.match(/([\w\-.]+\.[\w]+)\s+inside\s+([\w\-.\/]+)/i);
       if (fileMatch) {
-        const fileName = fileMatch[1];
-        const parentFolder = fileMatch[2];
-        let filePath = fileName;
+        let fileName = fileMatch[1];
+        let parentFolder = fileMatch[2];
+        // If the regex matched reversed groups (inside X create Y), ensure correct order
+        if (!parentFolder && fileMatch[2] && fileMatch[1] && /\//.test(fileMatch[2])) {
+          parentFolder = fileMatch[2];
+        }
 
+        let filePath = fileName;
         if (parentFolder) {
           filePath = `${normalizePath(parentFolder)}/${fileName}`;
         } else if (/^(?:inside|in|under)\b/i.test(line) && currentFolder) {
@@ -286,12 +238,61 @@ Update this implementation with secure password storage, session management, and
 
         filePath = normalizePath(filePath);
         if (!createdPaths.has(filePath)) {
-          actions.push({
+          const action = {
             type: 'create_file',
             path: filePath,
             content: ''
-          });
+          };
+          actions.push(action);
           createdPaths.add(filePath);
+          lastFileAction = action;
+        }
+        continue;
+      }
+
+      // Detect inline "write X inside Y" patterns (capture content and target)
+      const writeInsideMatch = line.match(/write\s+["']?(.+?)["']?\s+inside\s+["']?([\w\-.\/]+(?:\/[\w\-.]+)?(?:\.[\w]+)?)?["']?/i);
+      if (writeInsideMatch) {
+        const contentText = writeInsideMatch[1].trim();
+        const target = writeInsideMatch[2];
+        if (target) {
+          const targetPath = normalizePath(target);
+          // If target looks like a file
+          if (/\.[a-z0-9]+$/i.test(targetPath)) {
+            if (!createdPaths.has(targetPath)) {
+              const action = { type: 'create_file', path: targetPath, content: contentText };
+              actions.push(action);
+              createdPaths.add(targetPath);
+            } else {
+              // append content to existing file action
+              const existing = actions.find(a => a.path === targetPath && a.type === 'create_file');
+              if (existing) existing.content = (existing.content || '') + contentText;
+            }
+            continue;
+          }
+        }
+      }
+
+      // Detect content intro lines such as "The file content must be:", "Text:", etc.
+      const contentIntro = line.match(/^(?:the\s+file\s+content(?:\s+(?:must|should)\s+be)?|text|put\s+this\s+text|file\s+content)\s*[:\-]?\s*(.*)$/i);
+      if (contentIntro) {
+        const inline = contentIntro[1] && contentIntro[1].trim();
+        if (inline) {
+          if (lastFileAction) lastFileAction.content = (lastFileAction.content || '') + inline + '\n';
+        } else {
+          // consume subsequent lines as content until next instruction
+          let contentLines = [];
+          let j = idx + 1;
+          while (j < lines.length) {
+            const next = lines[j];
+            // stop if next line looks like a new instruction
+            if (/^create\b|^mkdir\b|^inside\b|^create\s+(?:a\s+)?(?:file|folder|directory|dir)\b/i.test(next)) break;
+            contentLines.push(next);
+            j++;
+          }
+          if (lastFileAction) lastFileAction.content = (lastFileAction.content || '') + contentLines.join('\n') + '\n';
+          // advance idx to skip consumed content lines
+          idx = j - 1;
         }
         continue;
       }
