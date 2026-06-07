@@ -165,6 +165,28 @@ describe('Planner Intent Classification & Filesystem Handling', () => {
     assert(actions.some(a => a.type === 'create_file' && a.path === 'frontend/components/index.md'), 'Should place index.md inside frontend/components');
   });
 
+  it('should create actions for explicit filesystem prompts', () => {
+    const task = 'Create file Login.tsx inside frontend/auth';
+    const actions = planner.createExecutionPlan(task);
+
+    assert(actions.length > 0, 'Should return actions for explicit filesystem prompts');
+    assert(actions.some(a => a.type === 'create_file' && a.path === 'frontend/auth/Login.tsx'), 'Should create the requested file inside the explicit path');
+  });
+
+  it('should recognize path-based prompts as filesystem intent and create file actions', () => {
+    const task = 'Create frontend/auth/Login.tsx';
+    const { intent } = planner.classifyIntent(task);
+    assert.strictEqual(intent, 'filesystem', 'Path-based prompt should be classified as filesystem intent');
+
+    const actions = planner.createExecutionPlan(task);
+    assert.strictEqual(actions.length, 1, 'Should generate exactly one filesystem action for a single path');
+    assert.deepStrictEqual(actions[0], {
+      type: 'create_file',
+      path: 'frontend/auth/Login.tsx',
+      content: ''
+    }, 'Should create a file action for the explicit path');
+  });
+
   it('should return empty actions for implementation intent (no auto scaffolding)', () => {
     const task = 'Build a feature that authenticates users';
     const actions = planner.createExecutionPlan(task);

@@ -54,7 +54,9 @@ export class Planner {
       /\bplan\b/
     ];
 
-    const filesystemMatch = filesystemPatterns.some(p => p.test(normalized));
+    const explicitPathPattern = /(?:^|\s)(?:[\w.\-]+\/)+[\w.\-]+(?:\.[\w\d]+)?(?:\s|$)/i;
+    const explicitPathMatch = explicitPathPattern.test(normalized);
+    const filesystemMatch = filesystemPatterns.some(p => p.test(normalized)) || explicitPathMatch;
     const implementationMatch = implementationPatterns.some(p => p.test(normalized));
     const planningMatch = planningPatterns.some(p => p.test(normalized));
 
@@ -118,9 +120,11 @@ export class Planner {
     // If the user explicitly included filesystem instructions anywhere in the
     // text, prefer literal parsing. This avoids accidental scaffolding for
     // implementation/planning prompts like "Design architecture...".
-    const hasFilesystemKeywords = /create\s+(?:a\s+)?(?:folder|directory|dir|file)|mkdir\b|inside\s+[\w\-\.\/]+|the\s+file\s+content\b|text:\b|put\s+this\s+text\b|write\s+.+\s+inside\b/i.test(normalized);
+    const explicitPathPattern = /(?:^|\s)(?:[\w.\-]+\/)+[\w.\-]+(?:\.[\w\d]+)?(?:\s|$)/i;
+    const hasExplicitPath = explicitPathPattern.test(normalized);
+    const hasFilesystemKeywords = /create\s+(?:a\s+)?(?:folder|directory|dir|file)|mkdir\b|inside\s+[\w\-\.\/]+|the\s+file\s+content\b|text:\b|put\s+this\s+text\b|write\s+.+\s+inside\b/i.test(normalized) || hasExplicitPath;
 
-    if (intent === 'filesystem' || hasFilesystemKeywords) {
+    if (intent === 'filesystem' || hasFilesystemKeywords || hasExplicitPath) {
       return this._parseFilesystemInstructions(taskDescription);
     }
 
@@ -215,6 +219,26 @@ export class Planner {
         }
         currentFolder = folderPath;
         lastFileAction = null;
+        continue;
+      }
+
+      const directPathMatch = line.match(/^(?:create\s+)?["']?((?:[\w\-.]+\/)+[\w\-.]+(?:\.[\w\d]+)?)['"]?$/i);
+      if (directPathMatch) {
+        const targetPath = normalizePath(directPathMatch[1]);
+        if (/\.[a-z0-9]+$/i.test(targetPath)) {
+          if (!createdPaths.has(targetPath)) {
+            const action = { type: 'create_file', path: targetPath, content: '' };
+            actions.push(action);
+            createdPaths.add(targetPath);
+            lastFileAction = action;
+          }
+        } else if (!createdFolders.has(targetPath)) {
+          actions.push({ type: 'create_folder', path: targetPath });
+          createdFolders.add(targetPath);
+          createdPaths.add(targetPath);
+          currentFolder = targetPath;
+          lastFileAction = null;
+        }
         continue;
       }
 
