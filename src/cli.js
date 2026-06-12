@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import {
+  analyzeProject
+} from './project-analyzer.js';
 import 'dotenv/config';
 import { readFile, writeFile, createFolder } from './fs.js';
 import { execShell } from './terminal.js';
