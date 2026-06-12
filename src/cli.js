@@ -225,7 +225,9 @@ async function main() {
         console.log('\nFilesystem execution approved.');
         
         // Phase 2: Execute filesystem actions
-        const executionPlan = planner.createExecutionPlan(task);
+        const projectContext = await analyzeProject(  process.cwd() );
+
+const executionPlan = planner.createExecutionPlan( task, projectContext );
         const filesystemResult = await executePlan(executionPlan);
 
         // Phase 3: Check for terminal actions

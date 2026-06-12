@@ -107,7 +107,10 @@ export class Planner {
     };
   }
 
-  createExecutionPlan(taskDescription) {
+  createExecutionPlan(
+  taskDescription,
+  projectContext = {}
+) {
     const normalized = (taskDescription || '').toLowerCase();
     const actions = [];
 
