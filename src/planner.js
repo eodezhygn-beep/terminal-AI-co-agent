@@ -13,8 +13,12 @@ export class Planner {
    * Classify task intent into filesystem, implementation, or planning
    * Returns: { intent: 'filesystem'|'implementation'|'planning', confidence: 0-1 }
    */
-  classifyIntent(taskDescription) {
+  classifyIntent(taskDescription, projectContext = {}) {
     const normalized = (taskDescription || '').toLowerCase();
+
+    if (this._matchesReactLoginTask(normalized, projectContext)) {
+      return { intent: 'implementation', confidence: 0.9 };
+    }
     
     // Filesystem intent patterns
     const filesystemPatterns = [
@@ -70,6 +74,14 @@ export class Planner {
 
     // Unknown / no specific intent detected
     return { intent: 'unknown', confidence: 0.5 };
+  }
+
+  _matchesReactLoginTask(taskDescription, projectContext = {}) {
+    const normalized = (taskDescription || '').toLowerCase();
+    const isReactTask = /\breact\b/.test(normalized);
+    const isLoginTask = /\blogin\b/.test(normalized);
+
+    return (projectContext.framework === 'react' || isReactTask) && isLoginTask;
   }
 
   createPlan(taskDescription) {

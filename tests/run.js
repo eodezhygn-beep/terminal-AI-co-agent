@@ -53,6 +53,14 @@ async function runTests() {
   const planner = new Planner({ agents: [] });
   const plan = planner.createPlan('Write README and add CLI commands');
   assert.ok(plan.steps.length >= 1);
+  assert.strictEqual(
+    planner.classifyIntent('Build a React login page').intent,
+    'implementation'
+  );
+  assert.strictEqual(
+    planner.classifyIntent('Build a login page', { framework: 'react' }).intent,
+    'implementation'
+  );
 
   const manager = new AgentManager();
   const longRunning = new LongRunningTaskManager();

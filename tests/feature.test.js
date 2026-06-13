@@ -109,6 +109,18 @@ describe('Planner Intent Classification & Filesystem Handling', () => {
     });
   });
 
+  it('should classify explicit React login tasks as implementation intent', () => {
+    const { intent } = planner.classifyIntent('Build a React login page');
+
+    assert.strictEqual(intent, 'implementation', 'React login task should be classified as implementation intent');
+  });
+
+  it('should classify login tasks as implementation when the project context is React', () => {
+    const { intent } = planner.classifyIntent('Build a login page', { framework: 'react' });
+
+    assert.strictEqual(intent, 'implementation', 'React project context should enable login task matching');
+  });
+
   it('should classify planning tasks as planning intent', () => {
     const tasks = [
       'Design the system architecture',
