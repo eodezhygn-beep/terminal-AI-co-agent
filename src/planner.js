@@ -143,6 +143,13 @@ export class Planner {
       return this._parseFilesystemInstructions(taskDescription);
     }
 
+    if (intent !== 'planning') {
+      const frameworkActions = this._createFrameworkAwareExecutionPlan(taskDescription, projectContext);
+      if (frameworkActions.length > 0) {
+        return frameworkActions;
+      }
+    }
+
     // For implementation/planning/unknown intents without explicit filesystem
     // instructions, do not create files, edit READMEs, or scaffold. Return
     // an empty execution plan to avoid legacy fallthrough behavior.
@@ -352,6 +359,43 @@ export class Planner {
   _defaultReasoning(taskDescription) {
     const { intent } = this.classifyIntent(taskDescription);
     return `Plan generated from task description: "${taskDescription}". Intent: ${intent}.`;
+  }
+
+  _createFrameworkAwareExecutionPlan(taskDescription, projectContext = {}) {
+    const normalized = (taskDescription || '').toLowerCase();
+    const isLoginTask = /\blogin\b/.test(normalized);
+    const isReactTask = projectContext.framework === 'react' || /\breact\b/.test(normalized);
+    const isAuthReference = /\bauth(?:entication|enticate)?\b/.test(normalized) || isLoginTask;
+    const isApiEndpoint = /\b(api|endpoint|rest|route|server)\b/.test(normalized);
+    const frontendPath = projectContext.preferredFrontendPath || 'src';
+    const backendPath = projectContext.preferredBackendPath || 'backend/src';
+
+    if (isLoginTask && isReactTask) {
+      return [
+        {
+          type: 'create_file',
+          path: `${frontendPath}/features/auth/Login.tsx`,
+          content: ''
+        },
+        {
+          type: 'create_file',
+          path: `${frontendPath}/features/auth/components/LoginForm.tsx`,
+          content: ''
+        }
+      ];
+    }
+
+    if (isAuthReference && isApiEndpoint) {
+      return [
+        {
+          type: 'create_file',
+          path: `${backendPath}/auth/login.ts`,
+          content: ''
+        }
+      ];
+    }
+
+    return [];
   }
 
   decomposeTask(taskDescription) {
