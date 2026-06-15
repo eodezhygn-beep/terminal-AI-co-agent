@@ -1,6 +1,7 @@
 // Comprehensive tests for CLI argument parsing and planner behavior fixes
 import assert from 'assert';
 import { Planner } from '../src/planner.js';
+import { generateCode } from '../src/code-generator.js';
 
 // Test 1: BUG 1 - Model argument parsing (--model flag handling)
 describe('CLI Model Argument Parsing', () => {
@@ -273,5 +274,59 @@ describe('Approval Plan File Handling', () => {
 describe('feature scaffold', () => {
   it('should run a placeholder test', () => {
     assert.strictEqual(1 + 1, 2);
+  });
+});
+
+describe('Code generation for framework-aware files', () => {
+  let planner;
+
+  beforeEach(() => {
+    planner = new Planner({ agents: [] });
+  });
+
+  it('should generate a non-empty React login page using React and Tailwind', async () => {
+    const projectContext = { framework: 'react', tailwind: true, preferredFrontendPath: 'src' };
+    const actions = planner.createExecutionPlan('Create a mobile-first login page using React and Tailwind', projectContext);
+
+    const loginAction = actions.find((action) => action.path.endsWith('Login.tsx'));
+    const formAction = actions.find((action) => action.path.endsWith('LoginForm.tsx'));
+
+    assert(loginAction, 'Login.tsx action should exist');
+    assert(formAction, 'LoginForm.tsx action should exist');
+    assert.strictEqual(loginAction.content, '', 'Generated framework-aware action should start empty');
+    assert.strictEqual(formAction.content, '', 'Generated framework-aware action should start empty');
+  });
+
+  it('should generate a non-empty backend login endpoint for auth API task', async () => {
+    const projectContext = { backend: true, preferredBackendPath: 'backend/src' };
+    const actions = planner.createExecutionPlan('Create login API endpoint', projectContext);
+
+    const apiAction = actions.find((action) => action.path.endsWith('auth/login.ts'));
+    assert(apiAction, 'backend auth/login.ts action should exist');
+    assert.strictEqual(apiAction.content, '', 'Generated framework-aware action should start empty');
+  });
+
+  it('should produce non-empty generated content for the React login page', () => {
+    const result = generateCode({
+      taskDescription: 'Create a mobile-first login page using React and Tailwind',
+      path: 'src/features/auth/Login.tsx',
+      projectContext: { framework: 'react', tailwind: true }
+    });
+
+    assert.ok(result.content && result.content.trim().length > 0, 'Generated React login page content should be non-empty');
+    assert.strictEqual(result.language, 'tsx');
+    assert.ok(result.content.includes('LoginForm'), 'Generated content should reference LoginForm');
+  });
+
+  it('should produce non-empty generated content for the backend login endpoint', () => {
+    const result = generateCode({
+      taskDescription: 'Create login API endpoint',
+      path: 'backend/src/auth/login.ts',
+      projectContext: { backend: true }
+    });
+
+    assert.ok(result.content && result.content.trim().length > 0, 'Generated backend login endpoint content should be non-empty');
+    assert.strictEqual(result.language, 'typescript');
+    assert.ok(result.content.includes('export async function login'), 'Generated API file should export login function');
   });
 });

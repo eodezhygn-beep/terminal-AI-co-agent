@@ -375,12 +375,14 @@ export class Planner {
         {
           type: 'create_file',
           path: `${frontendPath}/features/auth/Login.tsx`,
-          content: ''
+          content: '',
+          taskDescription
         },
         {
           type: 'create_file',
           path: `${frontendPath}/features/auth/components/LoginForm.tsx`,
-          content: ''
+          content: '',
+          taskDescription
         }
       ];
     }
@@ -390,7 +392,8 @@ export class Planner {
         {
           type: 'create_file',
           path: `${backendPath}/auth/login.ts`,
-          content: ''
+          content: '',
+          taskDescription
         }
       ];
     }
