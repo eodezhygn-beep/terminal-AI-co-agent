@@ -231,7 +231,7 @@ async function main() {
         const projectContext = await analyzeProject(  process.cwd() );
 
 const executionPlan = planner.createExecutionPlan( task, projectContext );
-        const filesystemResult = await executePlan(executionPlan);
+        const filesystemResult = await executePlan(executionPlan, projectContext);
 
         // Phase 3: Check for terminal actions
         const terminalActions = approvalPlan.terminalActions || [];

@@ -2,6 +2,8 @@ import readline from 'readline';
 import { createFolder, readFile, writeFile, appendFile, fileExists } from './fs.js';
 import { execShell } from './terminal.js';
 import { analyzeShellCommand } from './safety.js';
+import { generateCode } from './code-generator.js';
+import { validateFileWrite } from './validator.js';
 
 function describeAction(action) {
   switch (action.type) {
@@ -69,10 +71,34 @@ async function executeCreateFolder(action, summary) {
   summary.createdFolders.push(action.path);
 }
 
-async function executeCreateOrEditFile(action, summary) {
+async function generateFileContentIfNeeded(action, projectContext) {
+  if (action.type !== 'create_file' || (action.content && action.content.trim() !== '')) {
+    return action.content || '';
+  }
+
+  const generated = generateCode({
+    taskDescription: action.taskDescription || '',
+    path: action.path,
+    projectContext
+  });
+
+  return generated.content || '';
+}
+
+async function executeCreateOrEditFile(action, summary, projectContext) {
   const targetPath = action.path;
   const exists = await fileExists(targetPath);
-  const content = action.content || '';
+  const content = await generateFileContentIfNeeded(action, projectContext);
+
+  if (!content || !content.trim()) {
+    console.log(`Warning: no content generated for ${targetPath}. Writing empty file.`);
+  } else {
+    const validation = validateFileWrite({ path: targetPath, content, projectContext });
+    if (validation.warnings.length > 0) {
+      console.log(`Warning: ${targetPath} validation issues:`);
+      validation.warnings.forEach((warning) => console.log(`  - ${warning}`));
+    }
+  }
 
   if (exists) {
     const choice = await promptExistingFileAction(targetPath);
@@ -123,7 +149,7 @@ async function executeReadFile(action) {
   return readFile(action.path);
 }
 
-export async function executePlan(actions) {
+export async function executePlan(actions, projectContext = {}) {
   const summary = {
     createdFolders: [],
     createdFiles: [],
@@ -147,7 +173,7 @@ export async function executePlan(actions) {
           break;
         case 'create_file':
         case 'edit_file':
-          await executeCreateOrEditFile(action, summary);
+          await executeCreateOrEditFile(action, summary, projectContext);
           break;
         case 'append_file':
           await executeAppendFile(action, summary);
